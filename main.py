@@ -1,15 +1,54 @@
 import pygame
+import numpy as np
+import random
+
+from keras.models import Sequential
+from keras.layers import Dense, Activation
+
+TOTALPLAYERS = 20
 
 WIDTH = 600
 HEIGHT = 400
 FPS = 30
-TOTALPLAYERS = 1
+
 FPSCLOCK = 30
 MAXJUMP = 18
 
 playerX = 50
 
 IMAGES = {}
+
+models = []
+fitness = []
+
+TOTALPARENTS = 5
+
+
+for i in range(TOTALPLAYERS):
+    model = Sequential()
+    model.add(Dense(input_dim=2, units=1))
+    model.add(Activation('sigmoid'))
+    # model.add(Dense(units=1))
+    # model.add(Activation('sigmoid'))
+
+    fitness.append(0)
+    models.append(model)
+
+
+def predict(playerHeight, obstacleDistance, idx):
+    global models
+
+    playerHeight = playerHeight/HEIGHT
+    obstacleDistance = obstacleDistance/WIDTH
+
+    neuralInput = np.asarray([playerHeight, obstacleDistance])
+    neuralInput = np.atleast_2d(neuralInput)
+
+    output = models[idx].predict(neuralInput, 1)[0][0]
+
+    if output <=0.5:
+        return 1
+    return 2    
 
 
 def checkCollision(playerY, cactus):
@@ -20,6 +59,49 @@ def checkCollision(playerY, cactus):
             if cactus[cac]['x'] <= (playerX + 48) and playerY[player] >= HEIGHT - 128:
                 status[player] = True
     return status
+
+def nextGeneration():
+    global models, fitness
+
+    parents = []
+
+    for parent in range(TOTALPARENTS):
+        maxIdx = fitness.index(max(fitness))
+        parents.append(models[maxIdx])
+        fitness[maxIdx] = -1
+    
+    babiesWeights = []
+
+    for baby in range(TOTALPLAYERS - TOTALPARENTS):
+        kid = modelCrossover(models,baby%TOTALPARENTS,(baby+1)%TOTALPARENTS)
+        kidMutated = modelMutate(kid)
+        babiesWeights.append(kidMutated)
+
+    for player in range(TOTALPARENTS):
+        models[player] = parents[player]  
+
+    for player in range(TOTALPARENTS,TOTALPLAYERS):
+        models[player].set_weights(babiesWeights[player - TOTALPARENTS])      
+        
+
+def modelCrossover(current_pool,model_idx1, model_idx2):
+    weights1 = current_pool[model_idx1].get_weights()
+    weights2 = current_pool[model_idx2].get_weights()
+
+    weightsnew = weights1
+
+    weightsnew[0] = (weights2[0] + weights1[0])/2
+    weightsnew[1] = (weights2[1] + weights1[1])/2
+
+    return np.asarray(weightsnew)
+
+def modelMutate(weights):
+    for xi in range(len(weights)):
+        for yi in range(len(weights[xi])):
+            if random.uniform(0, 1) > 0.85:
+                change = random.uniform(-0.5,0.5)
+                weights[xi][yi] += change
+    return weights              
 
 
 def main():
@@ -35,11 +117,15 @@ def main():
 
     while True:
         playGame()
-        print("New Generation")
+        print("Total Fitness", sum(fitness))
+        nextGeneration()
 
 
 def playGame():
-    global FPSCLOCK, SCREEN, TOTALPLAYERS
+    global FPSCLOCK, SCREEN, TOTALPLAYERS, models, fitness
+
+    for player in range(TOTALPLAYERS):
+        fitness[player] = 0
 
     alivePlayers = TOTALPLAYERS
 
@@ -53,11 +139,7 @@ def playGame():
     for player in range(TOTALPLAYERS):
         playerJump.append(-1-MAXJUMP)
 
-    playerDownAcc = 4
-    playerPress = -200
     playerState = []
-
-    playerMinY = 200
 
     for player in range(TOTALPLAYERS):
         playerYlist.append(HEIGHT-IMAGES['player'].get_height())
@@ -72,25 +154,27 @@ def playGame():
 
         SCREEN.fill((255, 255, 255))
 
-        status = checkCollision(playerYlist, cactus)
-
-        for player in range(TOTALPLAYERS):
-            if status[player]:
-                playerState[player] = False
-                alivePlayers -= 1
-
         if alivePlayers == 0:
-            running = False
+            return 
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
-            if event.type == pygame.KEYDOWN:
-                for player in range(TOTALPLAYERS):
-                    # if playerState[player] and playerYlist[player]>playerMinY:
-                    #     playerYlist[player] += playerPress
-                    if playerJump[player] == (-MAXJUMP-1):
-                        playerJump[player] = MAXJUMP
+            
+        for player in range(TOTALPLAYERS):
+            if predict(playerYlist[player],cactus[0]['x'], player) == 1 and playerState[player]:
+                if playerJump[player] == (-MAXJUMP-1):
+                    playerJump[player] = MAXJUMP
+
+        status = checkCollision(playerYlist, cactus)
+
+        for player in range(TOTALPLAYERS):
+            if status[player] and playerState[player]:
+                playerState[player] = False
+                alivePlayers -= 1
+
+        if alivePlayers == 0:
+            return 
 
         for player in range(TOTALPLAYERS):
             if playerState[player]:
@@ -112,6 +196,10 @@ def playGame():
 
         for cac in cactus:
             SCREEN.blit(IMAGES['cactus'], (cac['x'], cac['y']))
+
+        for player in range(TOTALPLAYERS):
+            if playerState[player]:
+                fitness[player]+=1
 
         pygame.display.update()
         FPSCLOCK.tick(FPS)
