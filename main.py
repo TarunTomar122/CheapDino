@@ -5,11 +5,11 @@ import random
 from keras.models import Sequential
 from keras.layers import Dense, Activation
 
-TOTALPLAYERS = 20
+TOTALPLAYERS = 50
 
 WIDTH = 600
 HEIGHT = 400
-FPS = 30
+FPS = 1000
 
 FPSCLOCK = 30
 MAXJUMP = 18
@@ -21,15 +21,15 @@ IMAGES = {}
 models = []
 fitness = []
 
-TOTALPARENTS = 5
+TOTALPARENTS = 20
 
 
 for i in range(TOTALPLAYERS):
     model = Sequential()
-    model.add(Dense(input_dim=2, units=1))
+    model.add(Dense(input_dim=2, units=8))
     model.add(Activation('sigmoid'))
-    # model.add(Dense(units=1))
-    # model.add(Activation('sigmoid'))
+    model.add(Dense(units=1))
+    model.add(Activation('sigmoid'))
 
     fitness.append(0)
     models.append(model)
@@ -53,54 +53,130 @@ def predict(playerHeight, obstacleDistance, idx):
 
 def checkCollision(playerY, cactus):
     status = []
+    
+    phitmask = getHitmask(IMAGES['player'])
+    chitmask = getHitmask(IMAGES['cactus'])
+
     for player in range(TOTALPLAYERS):
         status.append(False)
+        pRect = pygame.Rect(playerX,playerY[player],IMAGES['player'].get_width(),IMAGES['player'].get_height())
         for cac in range(len(cactus)):
-            if cactus[cac]['x'] <= (playerX + 48) and playerY[player] >= HEIGHT - 128:
+            # if cactus[cac]['x'] <= (playerX + 16) and playerY[player] >= HEIGHT - 128:
+            #     status[player] = True
+            cRect = pygame.Rect(cactus[cac]['x'],cactus[cac]['y'],IMAGES['cactus'].get_width(),IMAGES['cactus'].get_height())
+
+            if pixelCollision(pRect, cRect, phitmask, chitmask):
                 status[player] = True
+            
+            
     return status
+
+
+def pixelCollision(rect1, rect2, hitmask1, hitmask2):
+    """Checks if two objects collide and not just their rects"""
+    rect = rect1.clip(rect2)
+
+    if rect.width == 0 or rect.height == 0:
+        return False
+
+    x1, y1 = rect.x - rect1.x, rect.y - rect1.y
+    x2, y2 = rect.x - rect2.x, rect.y - rect2.y
+
+    for x in range(rect.width):
+        for y in range(rect.height):
+            if hitmask1[x1+x][y1+y] and hitmask2[x2+x][y2+y]:
+                return True
+    return False
+
+def getHitmask(image):
+    """returns a hitmask using an image's alpha."""
+    mask = []
+    for x in range(image.get_width()):
+        mask.append([])
+        for y in range(image.get_height()):
+            mask[x].append(bool(image.get_at((x,y))[3]))
+    return mask
 
 def nextGeneration():
     global models, fitness
 
-    parents = []
+    newWeights = []
 
-    for parent in range(TOTALPARENTS):
-        maxIdx = fitness.index(max(fitness))
-        parents.append(models[maxIdx])
-        fitness[maxIdx] = -1
+    # parents = []
+
+    # for parent in range(TOTALPARENTS):
+    #     maxIdx = fitness.index(max(fitness))
+    #     parents.append(models[maxIdx])
+    #     fitness[maxIdx] = -1
     
-    babiesWeights = []
+    # babiesWeights = []
 
-    for baby in range(TOTALPLAYERS - TOTALPARENTS):
-        kid = modelCrossover(models,baby%TOTALPARENTS,(baby+1)%TOTALPARENTS)
-        kidMutated = modelMutate(kid)
-        babiesWeights.append(kidMutated)
+    # for baby in range(TOTALPLAYERS - TOTALPARENTS):
+    #     kid = modelCrossover(models,baby%TOTALPARENTS,(baby+1)%TOTALPARENTS)
+    #     kidMutated = modelMutate(kid)
+    #     babiesWeights.append(kidMutated)
 
-    for player in range(TOTALPARENTS):
-        models[player] = parents[player]  
+    # for player in range(TOTALPARENTS):
+    #     models[player] = parents[player]  
 
-    for player in range(TOTALPARENTS,TOTALPLAYERS):
-        models[player].set_weights(babiesWeights[player - TOTALPARENTS])      
+    # for player in range(TOTALPARENTS,TOTALPLAYERS):
+    #     models[player].set_weights(babiesWeights[player - TOTALPARENTS])    
+
+    totalFitness = sum(fitness)
+
+    for fit in range(TOTALPLAYERS):
+        fitness[fit] /= totalFitness
+
+    for player in range(TOTALPLAYERS//2):
+
+        idx1 = -1
+        idx2 = -1
+
+        parent1 = random.uniform(0,1)
+        parent2 = random.uniform(0,1)
+
+        for idxx in range(TOTALPLAYERS):
+            if fitness[idxx]>= parent1:
+                idx1 = idxx
+
+        for idxx in range(TOTALPLAYERS):
+            if fitness[idxx]>= parent2:
+                idx2 = idxx   
+
+        weights = modelCrossover(models,idx1,idx2)
         
+        weights1 = modelMutate(weights[0])
+        weights2 = modelMutate(weights[1])
+
+        newWeights.append(weights1)
+        newWeights.append(weights2)
+
+    for player in range(TOTALPLAYERS):
+        models[player].set_weights(newWeights[player])
 
 def modelCrossover(current_pool,model_idx1, model_idx2):
     weights1 = current_pool[model_idx1].get_weights()
     weights2 = current_pool[model_idx2].get_weights()
 
-    weightsnew = weights1
+    # weightsnew = weights1
 
-    weightsnew[0] = (weights2[0] + weights1[0])/2
-    weightsnew[1] = (weights2[1] + weights1[1])/2
+    # weightsnew[0] = (weights2[0] + weights1[0])/2
+    # weightsnew[1] = (weights2[1] + weights1[1])/2
 
-    return np.asarray(weightsnew)
+    weightsNew1 = weights1
+    weightsNew2 = weights2 
+
+    weights1[0] = weightsNew2[0]
+    weights2[0] = weightsNew1[0]
+
+    return np.asarray([weights1,weights2])
 
 def modelMutate(weights):
     for xi in range(len(weights)):
         for yi in range(len(weights[xi])):
-            if random.uniform(0, 1) > 0.85:
-                change = random.uniform(-0.5,0.5)
-                weights[xi][yi] += change
+            # if random.uniform(0, 1) > 0.85:
+            change = random.uniform(-0.5,0.5)
+            weights[xi][yi] += change
     return weights              
 
 
@@ -190,7 +266,7 @@ def playGame():
             cac['x'] += cacShift
 
         if cactus[0]['x'] <= 0:
-            cactus.append({'x': WIDTH, 'y': HEIGHT -
+            cactus.append({'x': random.randint(WIDTH-100,WIDTH), 'y': HEIGHT -
                            IMAGES['cactus'].get_height()})
             cactus.pop(0)
 
