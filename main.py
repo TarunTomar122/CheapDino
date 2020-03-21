@@ -5,8 +5,8 @@ import random
 from keras.models import Sequential
 from keras.layers import Dense, Activation
 
-TOTALPLAYERS = 50
-
+TOTALPLAYERS = 20
+num_generations = 2000
 WIDTH = 600
 HEIGHT = 400
 FPS = 1000
@@ -21,7 +21,7 @@ IMAGES = {}
 models = []
 fitness = []
 
-TOTALPARENTS = 20
+TOTALPARENTS = 5
 
 
 for i in range(TOTALPLAYERS):
@@ -191,9 +191,9 @@ def main():
     IMAGES['cactus'] = pygame.image.load('./cactus.png')
     IMAGES['player'] = pygame.image.load('./player.png')
 
-    while True:
+    for generation in range(num_generations):
         playGame()
-        print("Total Fitness", sum(fitness))
+        print("max fitness in genaration[",generation,'] = ', max(fitness))
         nextGeneration()
 
 
@@ -238,7 +238,9 @@ def playGame():
                 running = False
             
         for player in range(TOTALPLAYERS):
-            if predict(playerYlist[player],cactus[0]['x'], player) == 1 and playerState[player]:
+            if cactus[0]['x'] > playerX: xinp = cactus[0]['x']
+            else: xinp = cactus[1]['x']
+            if predict(playerYlist[player],xinp, player) == 1 and playerState[player]:
                 if playerJump[player] == (-MAXJUMP-1):
                     playerJump[player] = MAXJUMP
 
