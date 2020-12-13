@@ -5,3 +5,4 @@ Cheap People with Cheap Dino
 
 # Supporters
 
+  [<img src="https://avatars3.githubusercontent.com/u/42870378?v=4" width="60" height="60"/>](https://github.com/killbotXD)
